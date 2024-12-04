@@ -1,0 +1,125 @@
+if not game:IsLoaded() then game.Loaded:Wait() end
+if ClickAbleObjectExplorer_Loaded then return warn("[ClickObjExplorer] Already Loaded!") end
+
+local TweenService, UserInputService, Players, CoreGui = game:GetService("TweenService"), game:GetService("UserInputService"), game:GetService("Players"), game.CoreGui
+local LocalPlayer, Workspace = Players.LocalPlayer, game:GetService("Workspace")
+
+local gui, frame, titleFrame, titleLabel, searchBox, scrollFrame, scrollLayout = Instance.new("ScreenGui"), Instance.new("Frame"), Instance.new("Frame"), Instance.new("TextLabel"), Instance.new("TextBox"), Instance.new("ScrollingFrame"), Instance.new("UIListLayout")
+
+local isDragging, dragInput, dragStart, startPos = false, nil, nil, nil
+
+-- Encryption function for added security
+local function encrypt(str)
+    return string.reverse(str)
+end
+
+-- Decryption function
+local function decrypt(str)
+    return string.reverse(str)
+end
+
+-- Setup GUI properties
+gui.Parent = CoreGui
+
+frame.Size, frame.Position, frame.BackgroundColor3, frame.Parent = UDim2.new(0.4, 0, 0.3, 0), UDim2.new(0.3, 0, 0.3, 0), Color3.fromRGB(35, 35, 35), gui
+titleFrame.Size, titleFrame.BackgroundColor3, titleFrame.Parent = UDim2.new(1, 0, 0.1, 0), Color3.fromRGB(45, 45, 45), frame
+titleLabel.Text, titleLabel.TextColor3, titleLabel.Font, titleLabel.TextScaled, titleLabel.Size, titleLabel.BackgroundTransparency, titleLabel.Parent = "Advanced Object Explorer (INS Toggle)", Color3.fromRGB(255, 255, 255), Enum.Font.GothamBold, true, UDim2.new(1, 0, 1, 0), 1, titleFrame
+searchBox.Size, searchBox.Position, searchBox.PlaceholderText, searchBox.Text, searchBox.TextColor3, searchBox.Font, searchBox.TextScaled, searchBox.BackgroundColor3, searchBox.Parent = UDim2.new(1, 0, 0.05, 0), UDim2.new(0, 0, 0.1, 0), "Search Object Name...", "", Color3.fromRGB(255, 255, 255), Enum.Font.Gotham, true, Color3.fromRGB(45, 45, 45), frame
+scrollFrame.Size, scrollFrame.Position, scrollFrame.CanvasSize, scrollFrame.ScrollBarThickness, scrollFrame.BackgroundTransparency, scrollFrame.ScrollBarImageColor3, scrollFrame.Parent = UDim2.new(1, 0, 0.85, 0), UDim2.new(0, 0, 0.15, 0), UDim2.new(0, 0, 5, 0), 5, 1, Color3.fromRGB(200, 200, 200), frame
+scrollLayout.SortOrder, scrollLayout.Padding, scrollLayout.Parent = Enum.SortOrder.LayoutOrder, UDim.new(0, 5), scrollFrame
+
+local function makeDraggable(guiObject)
+    local function update(input)
+        local delta = input.Position - dragStart
+        guiObject.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+
+    guiObject.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            isDragging, dragStart, startPos = true, input.Position, guiObject.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then isDragging = false end
+            end)
+        end
+    end)
+    guiObject.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement then dragInput = input end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if input == dragInput and isDragging then update(input) end
+    end)
+end
+
+local function getHierarchyPath(object)
+    local path = {}
+    while object do table.insert(path, 1, encrypt(object.Name)) object = object.Parent end
+    return encrypt("game.Workspace.") .. table.concat(path, ".")
+end
+
+local function interactEffect(button)
+    local originalColor = button.BackgroundColor3
+    TweenService:Create(button, TweenInfo.new(0.2), { BackgroundColor3 = Color3.fromRGB(60, 60, 60) }):Play()
+    wait(0.2)
+    TweenService:Create(button, TweenInfo.new(0.2), { BackgroundColor3 = originalColor }):Play()
+end
+
+local function addButton(object)
+    local path = getHierarchyPath(object)
+local button = Instance.new("TextButton", scrollFrame)
+    button.Text, button.TextColor3, button.Font, button.TextScaled, button.Size, button.BackgroundColor3 = decrypt(path), Color3.fromRGB(255, 255, 255), Enum.Font.Gotham, true, UDim2.new(1, 0, 0, 30), Color3.fromRGB(50, 50, 50)
+
+    button.MouseButton1Click:Connect(function()
+        setclipboard(decrypt(path))
+        interactEffect(button)
+    end)
+
+    local conn
+    if object:IsA("ClickDetector") then
+        conn = object.MouseClick:Connect(function(player)
+            if player == LocalPlayer then interactEffect(button) end
+        end)
+    elseif object:IsA("ProximityPrompt") then
+        conn = object.Triggered:Connect(function(player)
+            if player == LocalPlayer then interactEffect(button) end
+        end)
+    elseif object:IsA("TouchTransmitter") and object.Parent:IsA("BasePart") then
+        conn = object.Parent.Touched:Connect(function(part)
+            local player = Players:GetPlayerFromCharacter(part.Parent)
+            if player == LocalPlayer then interactEffect(button) end
+        end)
+    end
+
+    object.AncestryChanged:Connect(function(_, parent)
+        if not parent then button:Destroy() conn:Disconnect() end
+    end)
+end
+
+searchBox:GetPropertyChangedSignal("Text"):Connect(function()
+    local searchTerm = searchBox.Text:lower()
+    for _, button in pairs(scrollFrame:GetChildren()) do
+        if button:IsA("TextButton") then
+            button.Visible = button.Text:lower():find(searchTerm) ~= nil
+        end
+    end
+end)
+
+for _, object in pairs(Workspace:GetDescendants()) do
+    if object:IsA("ClickDetector") or object:IsA("ProximityPrompt") or object:IsA("TouchTransmitter") then
+        addButton(object)
+    end
+end
+
+Workspace.DescendantAdded:Connect(function(object)
+    if object:IsA("ClickDetector") or object:IsA("ProximityPrompt") or object:IsA("TouchTransmitter") then
+        addButton(object)
+    end
+end)
+
+gui.InputBegan:Connect(function(input)
+    if input.KeyCode == Enum.KeyCode.Insert then
+        frame.Visible = not frame.Visible
+    end
+end)
+
+makeDraggable(frame)
+getgenv().ClickAbleObjectExplorer_Loaded = true
